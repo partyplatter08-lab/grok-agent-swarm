@@ -1,148 +1,138 @@
 # Agent Swarm for Grok Build
 
-Kimi K3–style **Agent Swarm** as a drop-in [Grok Build](https://x.ai) plugin.
-
-One orchestrator (your main session) decomposes a **wide** task, fans out parallel subagents, waits for results, resolves conflicts, and synthesizes a single deliverable.
+Kimi K3–style **Agent Swarm** as a drop-in [Grok Build](https://x.ai) plugin — including a first-class option in the **effort selector**.
 
 ```
-                 ┌──────────────────┐
-                 │   Orchestrator   │  ← you / /swarm skill
-                 │  decompose+merge │
-                 └────────┬─────────┘
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-     ┌─────────┐    ┌─────────┐    ┌─────────┐
-     │ worker  │    │ worker  │    │ worker  │  ← background subagents
-     └─────────┘    └─────────┘    └─────────┘
+  Effort picker                    Session behavior
+  ┌─────────────────┐              ┌──────────────────────────┐
+  │ High Effort     │              │ single agent             │
+  │ Medium Effort   │              │ single agent             │
+  │ Low Effort      │              │ single agent             │
+  │ Agent Swarm  ◄──┼── select ──► │ orchestrator + subagents │
+  └─────────────────┘              └──────────────────────────┘
 ```
-
-This is **not** Moonshot’s PARL-trained model weights. It is the same *workflow shape* (orchestrator → parallel sub-agents → synthesize) implemented with Grok Build’s real primitives: skills, `spawn_subagent`, worktrees, and a depth-1 agent tree.
 
 ## Install (any Grok Build machine)
-
-### From GitHub (recommended)
 
 ```bash
 grok plugin install partyplatter08-lab/grok-agent-swarm --trust
 grok plugin enable agent-swarm
 ```
 
-Pin a version/commit if you want:
+Pin a release:
 
 ```bash
-grok plugin install partyplatter08-lab/grok-agent-swarm@v1.0.0 --trust
+grok plugin install partyplatter08-lab/grok-agent-swarm@v1.1.0 --trust
 ```
 
-### From a local clone
-
-```bash
-git clone https://github.com/partyplatter08-lab/grok-agent-swarm.git
-grok plugin install ./grok-agent-swarm --trust
-grok plugin enable agent-swarm
-```
+Then **start a new session** (or reload hooks). On `SessionStart` the plugin writes the effort-menu entry into `~/.grok/config.toml`.
 
 ### Verify
 
 ```bash
 grok plugin list
-grok inspect          # should show skill "swarm" from plugin: agent-swarm
+# Agent Swarm should be listed among effort options:
+grok -p "ping" --effort swarm   # accepted; remaps wire value to xhigh
 ```
 
-In a session:
+In the TUI: open the model/effort picker → choose **Agent Swarm**.
 
-```
-/swarm
-/plugins              # confirm agent-swarm is enabled
-```
+## Seamless usage
 
-## Usage
+| How | What happens |
+|-----|----------------|
+| **Effort selector → Agent Swarm** | Every prompt runs in orchestrator mode (hook injects the swarm protocol). |
+| `/effort swarm` | Same as the picker. |
+| `grok --effort swarm ...` | Same in headless. |
+| `/swarm <task>` | Explicit skill entry (still available). |
+| `/agents` → **swarm** | Optional primary agent with the same protocol. |
 
-```text
-/swarm <task> [--concurrency N] [--mode research|build|mixed] [--dry-run] [--max-waves N]
-```
-
-| Flag | Default | Purpose |
-|------|---------|---------|
-| `--concurrency N` | `8` | Max simultaneous workers (1–24) |
-| `--mode` | auto | `research`, `build`, or `mixed` |
-| `--dry-run` | off | Plan only — no spawns |
-| `--max-waves` | `4` | Max dependency / revise waves |
+You should not need to type `/swarm` after selecting **Agent Swarm** in the effort menu. Just give the task.
 
 ### Examples
 
 ```text
-/swarm Survey 12 competitor pricing pages and return a comparison table. --mode research --concurrency 12
+# After selecting Agent Swarm in the effort picker:
+Survey 12 competitor pricing pages into a comparison table.
 
-/swarm Scaffold apps/web, apps/api, packages/ui with disjoint path ownership. --mode build --concurrency 3
+Scaffold apps/web, apps/api, packages/ui with disjoint path ownership.
 
-/swarm Security, performance, and DX audit of this repo in parallel, then a ranked fix list. --mode mixed
-
-/swarm Compare agent frameworks for tool use --dry-run
+Security, performance, and DX audit in parallel, then a ranked fix list.
 ```
 
-Natural language also works once the plugin is enabled:
+Or explicitly:
 
-> “Swarm this: pull structured notes from every markdown file under docs/ and build one FAQ.”
+```text
+/swarm Compare the top open-source agent frameworks. --concurrency 10 --mode research
+```
+
+## How the effort option works
+
+Plugins cannot invent new API reasoning levels. This plugin:
+
+1. **SessionStart** — ensures your default model’s effort menu includes:
+
+   | Menu id | Label | Wire value |
+   |---------|-------|------------|
+   | `high` / `medium` / `low` | stock | same |
+   | **`swarm`** | **Agent Swarm** | **`xhigh`** |
+
+2. **UserPromptSubmit** — if the session’s `reasoning_effort` is `xhigh` (the swarm wire value), injects orchestrator instructions so the model loads the swarm skill and fans out subagents.
+
+`xhigh` is reserved for this menu entry so swarm is distinguishable from ordinary **High Effort** (`high`). Stock low/medium/high stay unchanged.
+
+Managed config lives between markers in `~/.grok/config.toml`:
+
+```toml
+# --- agent-swarm effort (managed) ---
+...
+# --- agent-swarm effort end ---
+```
+
+Uninstalling the plugin stops injection; remove the managed block manually if you want the stock effort list only.
 
 ## When to use a swarm
 
-**Good fit**
+**Good fit:** multi-source research, batch extraction, multi-module scaffolds with clear path ownership, multi-perspective reviews.
 
-- Multi-source research / batch extraction
-- Multi-module scaffolding with clear path ownership
-- Multi-perspective reviews (security ∥ perf ∥ UX)
-- Anything that is *wide* more than *deep*
-
-**Bad fit**
-
-- Single-file fixes
-- Long sequential refactors with shared mutable state
-- Tasks where each step depends on the previous answer
-
-The skill will warn and offer single-agent fallback when the task is not swarm-shaped.
+**Bad fit:** single-file fixes, long sequential refactors with shared mutable state. The orchestrator will warn and fall back to single-agent when the task is not swarm-shaped.
 
 ## What’s inside
 
 ```
 grok-agent-swarm/
 ├── plugin.json
-├── .claude-plugin/plugin.json   # marketplace-compatible manifest
-├── commands/swarm.md            # /swarm slash entry
+├── hooks/hooks.json              # SessionStart + UserPromptSubmit
+├── scripts/
+│   ├── ensure_swarm_effort.py    # register effort-picker option
+│   └── inject_swarm_mode.py      # activate protocol when swarm selected
+├── commands/swarm.md
 ├── skills/swarm/
-│   ├── SKILL.md                 # orchestrator protocol
+│   ├── SKILL.md
 │   └── references/
-│       ├── decomposition.md
-│       └── synthesis.md
 ├── agents/
+│   ├── swarm.md                  # primary orchestrator agent
 │   ├── swarm-worker.md
 │   ├── swarm-researcher.md
 │   └── swarm-reviewer.md
-├── LICENSE
 └── README.md
 ```
 
-| Piece | Role |
-|-------|------|
-| `skills/swarm` | Main protocol — orchestrator behavior, waves, spawn rules, synthesis |
-| `commands/swarm` | Slash-command entry that loads the skill |
-| `agents/*` | Optional specialized worker definitions |
-
 ## Design notes (vs Kimi K3 Swarm Max)
 
-| Kimi K3 Swarm | This plugin on Grok Build |
-|---------------|---------------------------|
-| Learned PARL orchestrator policy | Prompted skill protocol |
-| Up to ~300 sub-agents | Practical default 8 (cap 24) |
-| Nested coordination budget ~4k steps | Flat tree: parent only spawns (depth 1) |
-| Dedicated Swarm Max model | Your current Grok model + subagents |
-
-Higher concurrency is available via `--concurrency`, but quality usually peaks well below marketing ceilings. Prefer a second **verify** wave over dozens of shallow workers.
+| Kimi K3 Swarm | This plugin |
+|---------------|-------------|
+| Learned PARL orchestrator | Prompted skill + effort-mode injection |
+| ~300 sub-agents | Default 8, cap 24 |
+| Nested coordination | Flat tree (Grok depth 1) |
+| Dedicated Swarm Max model | Effort picker option on your Grok model |
 
 ## Uninstall
 
 ```bash
 grok plugin disable agent-swarm
 grok plugin uninstall agent-swarm --confirm
+# optional: delete the managed block in ~/.grok/config.toml
 ```
 
 ## License

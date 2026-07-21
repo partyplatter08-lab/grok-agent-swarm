@@ -1,7 +1,7 @@
 {
   "name": "agent-swarm",
-  "version": "1.0.0",
-  "description": "Kimi-style Agent Swarm for Grok Build: one orchestrator decomposes wide tasks, fans out parallel subagents, and synthesizes results.",
+  "version": "1.1.0",
+  "description": "Kimi-style Agent Swarm for Grok Build \u2014 appears in the effort selector as Agent Swarm; orchestrator fans out parallel subagents and synthesizes results.",
   "author": {
     "name": "partyplatter08-lab"
   },

@@ -1,0 +1,27 @@
+{
+  "description": "Agent Swarm: register effort-picker option and activate orchestrator mode when Agent Swarm is selected",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${GROK_PLUGIN_ROOT}/scripts/ensure_swarm_effort.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${GROK_PLUGIN_ROOT}/scripts/inject_swarm_mode.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
