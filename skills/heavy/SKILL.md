@@ -24,6 +24,18 @@ Grok Build limits:
 - Spawn with `background: true` in the same turn for true parallelism.
 - Collect with `get_command_or_subagent_output`.
 
+## Visual identity (mandatory)
+
+Follow `skills/shared/visuals.md`:
+
+1. Open with the `◈ HEAVY` banner.
+2. Council tags only: `[Council/Analyst]`, `[Council/Skeptic]`, `[Council/Explorer]`, `[Council/Builder]`, `[Council/Verifier]`.
+3. Phase rules `── H1 council frame ──` then spawn all council members in the **same** turn.
+4. Live board with `●/○/✓/✗` while waiting.
+5. Close with HEAVY complete banner; final report `# ◈ HEAVY RESULT`.
+
+Never leave tasks-pane rows labeled “General”.
+
 ---
 
 ## Invocation
@@ -56,17 +68,19 @@ If the task is a wide batch with little debate value, recommend `/swarm` instead
 
 Use these role tags in spawn `description` prefixes so the tasks pane labels them:
 
-| Tag | Role | Focus |
-|-----|------|--------|
-| `[heavy:captain]` | You (leader) | Synthesis only — do not also be a worker |
-| `[heavy:analyst]` | Analyst | Structure, constraints, edge cases, formal reasoning |
-| `[heavy:skeptic]` | Skeptic | Attack assumptions, find holes, demand evidence |
-| `[heavy:explorer]` | Explorer | Alternate approaches, creative paths, analogies |
-| `[heavy:implementer]` | Implementer | Concrete steps, code/design practicality, feasibility |
-| `[heavy:verifier]` | Verifier | Fact-check, sources, consistency (round 2+) |
+| Tag (tasks pane) | Role | Focus |
+|------------------|------|--------|
+| (you — no spawn) | Captain / leader | Synthesis only |
+| `[Council/Analyst]` | Analyst | Structure, constraints, edge cases |
+| `[Council/Skeptic]` | Skeptic | Attack assumptions, demand evidence |
+| `[Council/Explorer]` | Explorer | Alternate approaches, analogies |
+| `[Council/Builder]` | Builder | Concrete feasibility / steps |
+| `[Council/Verifier]` | Verifier | Fact-check (round 2+) |
 
-For N=4 default: Analyst, Skeptic, Explorer, Implementer.  
-For N=6–8: add Verifier + second Analyst/Explorer variants with distinct briefs.
+For N=4 default: Analyst, Skeptic, Explorer, Builder.  
+For N=6–8: add Verifier + extra Explorer/Analyst with distinct briefs.
+
+`description` example: `"[Council/Skeptic] attack auth assumptions"`
 
 ---
 
@@ -76,13 +90,7 @@ For N=6–8: add Verifier + second Analyst/Explorer variants with distinct brief
 
 1. Restate the problem in 2–5 bullets (goal, constraints, success criteria).
 2. Decide N and rounds (user flags win).
-3. Announce:
-
-```
-Heavy mode: <short goal>
-council=<N> rounds=<R>
-roles: ...
-```
+3. Print the HEAVY open banner (visuals.md), including council size and rounds.
 
 ### Phase 1 — Parallel first pass (always)
 
@@ -118,7 +126,7 @@ Spawn params:
 - `subagent_type`: `general-purpose` (or `explore` for pure research lenses)
 - `background`: `true`
 - `capability_mode`: `read-only` for research/debate; full tools only if the problem requires code execution
-- `description`: `"[heavy:<role>] <short label>"`
+- `description`: `"[Council/<Role>] <short label>"`
 
 Wait for all. Do not start synthesis until the full first-pass council returns (or timed-out/killed stragglers are marked failed).
 
@@ -162,7 +170,7 @@ Produce the **one** user-facing answer:
 ### Report shape
 
 ```markdown
-# Heavy Result: <goal>
+# ◈ HEAVY RESULT · <goal>
 
 ## Answer
 <final answer>
@@ -170,7 +178,7 @@ Produce the **one** user-facing answer:
 ## Confidence
 high | medium | low — <why>
 
-## Council ledger
+## Board (final)
 | role | thesis (1 line) | status |
 |------|-----------------|--------|
 

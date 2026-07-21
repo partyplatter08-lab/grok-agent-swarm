@@ -26,8 +26,21 @@ Grok Build hard limits you must respect:
 
 References (read when needed):
 
+- `../shared/visuals.md` — **required** banners, board, tasks-pane labels
 - `references/decomposition.md` — how to split tasks
 - `references/synthesis.md` — how to merge worker outputs without hallucination amplification
+
+## Visual identity (mandatory)
+
+Read and follow `skills/shared/visuals.md` (plugin path). Every run must:
+
+1. Open with the `⬡ SWARM` banner (exact box shape from visuals.md).
+2. Tag every worker: `description: "[Swarm/u-N] <title>"` (never bare/general labels).
+3. Print phase rules `── S2 fan-out  wave k · launching N ──` then spawn in the **same** turn.
+4. Keep a live **board** (`●/○/✓/✗`) while waiting.
+5. Close with the SWARM complete banner; final report title `# ⬡ SWARM RESULT`.
+
+If it looks like a generic “Subagent running: General”, you are doing it wrong.
 
 ---
 
@@ -73,12 +86,7 @@ If the task is not swarm-shaped:
 2. Offer: (a) proceed as single-agent, or (b) reframe the task to a wider parallel slice.
 3. Only continue as swarm if the user insists after the warning.
 
-If it *is* swarm-shaped, announce:
-
-```
-Agent Swarm: <short goal>
-mode=<mode> concurrency=<N> max-waves=<W>
-```
+If it *is* swarm-shaped, print the SWARM open banner from visuals.md (not a plain one-liner).
 
 ---
 
@@ -159,7 +167,7 @@ For each unit in the ready set (up to concurrency):
 | Field | Guidance |
 |-------|----------|
 | `prompt` | Full self-contained brief (workers have no parent chat). Include goal, inputs, constraints, and **exact return contract**. |
-| `description` | `"[swarm:<kind>] u-<n>: <title>"` — bracket tag labels the tasks pane |
+| `description` | `"[Swarm/u-<n>] <title>"` — tasks-pane label (see visuals.md) |
 | `subagent_type` | From the unit plan |
 | `background` | **always `true`** for wave workers |
 | `capability_mode` | From the unit plan when set |
@@ -295,20 +303,17 @@ Synthesis rules (see `references/synthesis.md`):
 ### Final report shape
 
 ```markdown
-# Swarm Result: <goal>
+# ⬡ SWARM RESULT · <goal>
 
 ## Deliverable
 <the actual answer / artifact / code summary>
 
-## Swarm stats
-- Units: N (success / partial / failed)
-- Waves: W
-- Concurrency: C
-- Mode: ...
-
-## Unit ledger
+## Board (final)
 | id | title | status | notes |
 |----|-------|--------|-------|
+
+## Stats
+units N · waves W · concurrency C · mode …
 
 ## Conflicts & gaps
 - ...

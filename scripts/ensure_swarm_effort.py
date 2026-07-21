@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Register effort-selector modes + install primary agents.
+"""Seamless multi-agent efforts: menu + mode detection + default modes agent.
 
-Menu order (top → bottom):
-  1. Swarm Heavy  — collaborative council + K3-style swarm fan-out
-  2. Agent Swarm  — K3-style parallel map/reduce
-  3. Heavy        — Grok Heavy-style collaborative multi-agent debate
-  4. High Effort  — stock default
-  5. Medium Effort
-  6. Low Effort
+Effort selector (top → bottom):
+  Swarm Heavy  → wire xhigh   → mode swarm-heavy
+  Agent Swarm  → wire none    → mode swarm
+  Heavy        → wire minimal → mode heavy
+  High/Med/Low → stock        → mode normal
 
-Also installs ~/.grok/agents/{swarm,heavy,swarm-heavy}.md and a SessionStart
-hook that re-runs this script so the menu stays healthy.
-
-Idempotent.
+Installs:
+  - effort menu block in config.toml
+  - ~/.grok/agents/modes.md (+ heavy/swarm/swarm-heavy agents)
+  - [agent] name = "modes" so every session is mode-aware
+  - hooks: SessionStart (this script), UserPromptSubmit (inject_mode.py)
 """
 
 from __future__ import annotations
@@ -25,41 +24,42 @@ from pathlib import Path
 
 MARKER_BEGIN = "# --- agent-swarm effort (managed) ---"
 MARKER_END = "# --- agent-swarm effort end ---"
+AGENT_MARKER_BEGIN = "# --- agent-swarm agent (managed) ---"
+AGENT_MARKER_END = "# --- agent-swarm agent end ---"
 MODEL_MARKER_BEGIN = "# --- agent-swarm model (managed) ---"
 MODEL_MARKER_END = "# --- agent-swarm model end ---"
 
-# Display order = list order. Special modes first (above High).
-# Wire values must be API-valid: low|medium|high|xhigh|max (max≡xhigh).
-# Special modes share xhigh so they get maximum reasoning; differentiation
-# is via the matching primary agent (/agents or --agent).
+# Unique wire values so inject_mode can detect which menu item was selected.
+# xhigh = max reasoning (Swarm Heavy). minimal/none are API-valid and distinct;
+# multi-agent structure compensates for lower sampling effort on those modes.
 EFFORTS = [
     {
         "id": "swarm-heavy",
         "value": "xhigh",
         "label": "Swarm Heavy",
         "description": (
-            "Collaborative multi-agent council + K3-style parallel swarm "
-            "fan-out — maximum depth and width"
+            "Full Swarm Heavy mode: collaborative council + K3-style parallel "
+            "fan-out + verify (same as /swarm-heavy)"
         ),
         "default": False,
     },
     {
         "id": "swarm",
-        "value": "xhigh",
+        "value": "none",
         "label": "Agent Swarm",
         "description": (
-            "K3-style parallel orchestration: decompose wide work, fan out "
-            "subagents, synthesize one deliverable"
+            "Full Agent Swarm mode: decompose, parallel subagents, synthesize "
+            "(same as /swarm)"
         ),
         "default": False,
     },
     {
         "id": "heavy",
-        "value": "xhigh",
+        "value": "minimal",
         "label": "Heavy",
         "description": (
-            "Grok Heavy-style collaborative multi-agent debate: parallel "
-            "hypotheses, cross-check, leader synthesis"
+            "Full Heavy mode: collaborative multi-agent council + leader "
+            "synthesis (same as /heavy)"
         ),
         "default": False,
     },
@@ -67,26 +67,26 @@ EFFORTS = [
         "id": "high",
         "value": "high",
         "label": "High Effort",
-        "description": "Highest single-agent implementation quality with extensive reasoning",
+        "description": "Single-agent, high reasoning",
         "default": True,
     },
     {
         "id": "medium",
         "value": "medium",
         "label": "Medium Effort",
-        "description": "Balanced effort with standard implementation and testing",
+        "description": "Single-agent, balanced",
         "default": False,
     },
     {
         "id": "low",
         "value": "low",
         "label": "Low Effort",
-        "description": "Quick, fast implementations",
+        "description": "Single-agent, fast",
         "default": False,
     },
 ]
 
-USER_AGENTS = ("swarm", "heavy", "swarm-heavy")
+USER_AGENTS = ("modes", "swarm", "heavy", "swarm-heavy")
 
 
 def grok_home() -> Path:
@@ -128,6 +128,7 @@ def effort_block(model_id: str) -> str:
         MARKER_BEGIN,
         "# Injected by agent-swarm plugin. Do not hand-edit between markers.",
         "# Order: Swarm Heavy → Agent Swarm → Heavy → High → Medium → Low",
+        "# Wires: xhigh | none | minimal | high | medium | low (unique for mode detect)",
         f"[{key}]",
         "supports_reasoning_effort = true",
         "",
@@ -142,6 +143,19 @@ def effort_block(model_id: str) -> str:
         lines.append("")
     lines.append(MARKER_END)
     return "\n".join(lines) + "\n"
+
+
+def agent_block() -> str:
+    return "\n".join(
+        [
+            AGENT_MARKER_BEGIN,
+            '# Default agent is mode-aware: effort picker activates full /heavy|/swarm|/swarm-heavy protocols.',
+            "[agent]",
+            'name = "modes"',
+            AGENT_MARKER_END,
+            "",
+        ]
+    )
 
 
 def strip_between(text: str, begin: str, end: str) -> str:
@@ -168,12 +182,6 @@ def strip_orphaned_model_effort_blocks(text: str, model_id: str) -> str:
     )
     text = re.sub(
         r"\n# --- swarm effort test start ---.*?# --- swarm effort test end ---\n?",
-        "\n",
-        text,
-        flags=re.S,
-    )
-    text = re.sub(
-        r"\n# --- swarm model test ---.*?# --- swarm model test end ---\n?",
         "\n",
         text,
         flags=re.S,
@@ -205,7 +213,8 @@ def install_user_agents() -> dict[str, str]:
 def install_global_hooks() -> str:
     root = plugin_root().resolve()
     ensure = root / "scripts" / "ensure_swarm_effort.py"
-    if not ensure.is_file():
+    inject = root / "scripts" / "inject_mode.py"
+    if not ensure.is_file() or not inject.is_file():
         return "hooks_skipped"
 
     hooks_dir = grok_home() / "hooks"
@@ -213,7 +222,7 @@ def install_global_hooks() -> str:
     hook_path = hooks_dir / "agent-swarm.json"
 
     payload = {
-        "description": "Agent Swarm: keep effort-picker modes registered",
+        "description": "Agent Swarm: seamless effort→mode activation",
         "hooks": {
             "SessionStart": [
                 {
@@ -228,7 +237,21 @@ def install_global_hooks() -> str:
                         }
                     ]
                 }
-            ]
+            ],
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                f'env GROK_PLUGIN_ROOT="{root}" '
+                                f'python3 "{inject}"'
+                            ),
+                            "timeout": 10,
+                        }
+                    ]
+                }
+            ],
         },
     }
     new = json.dumps(payload, indent=2) + "\n"
@@ -249,10 +272,12 @@ def main() -> int:
     original = cfg_path.read_text()
     model_id = detect_default_model(original)
     cleaned = strip_between(original, MARKER_BEGIN, MARKER_END)
+    cleaned = strip_between(cleaned, AGENT_MARKER_BEGIN, AGENT_MARKER_END)
     cleaned = strip_orphaned_model_effort_blocks(cleaned, model_id)
+    # Remove any prior unmanaged [agent] name = modes we own
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).rstrip() + "\n"
 
-    new_text = cleaned + "\n" + effort_block(model_id)
+    new_text = cleaned + "\n" + effort_block(model_id) + "\n" + agent_block()
     cfg_status = "unchanged"
     if new_text != original:
         cfg_path.write_text(new_text)
@@ -273,6 +298,7 @@ def main() -> int:
                 "hooks": hooks_status,
                 "model": model_id,
                 "effort_order": [e["id"] for e in EFFORTS],
+                "default_agent": "modes",
                 "config_path": str(cfg_path),
             }
         )

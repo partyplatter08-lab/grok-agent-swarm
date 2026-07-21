@@ -67,6 +67,18 @@ Grok does not let plugins rewrite the system prompt when you only change **effor
   packages/ui in parallel, then adversarial review. --council 4 --concurrency 3
 ```
 
+## Visuals (tasks pane + scrollback)
+
+Grok can’t theme per-mode, so the plugin uses a **fixed visual language**:
+
+| Mode | Mark | Tasks-pane tags |
+|------|------|-----------------|
+| Heavy | `◈ HEAVY` | `[Council/Analyst]`, `[Council/Skeptic]`, … |
+| Agent Swarm | `⬡ SWARM` | `[Swarm/u-1]`, `[Swarm/u-2]`, … |
+| Swarm Heavy | `⬢ SWARM HEAVY` | `[SH/H1·…]`, `[SH/S·u-N]`, `[SH/H2·…]` |
+
+Orchestrators print box banners, phase rules, and a live board (`● running / ○ pending / ✓ done / ✗ failed`). Primary agents use distinct colors (purple / orange / red / yellow). Spec: `skills/shared/visuals.md`.
+
 ## Mode cheat sheet
 
 ### Heavy (Grok Heavy-style)

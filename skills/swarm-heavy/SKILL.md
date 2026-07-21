@@ -25,6 +25,19 @@ Load full detail when needed:
 
 - Heavy protocol: skill `heavy` (`skills/heavy/SKILL.md` in this plugin)
 - Swarm protocol: skill `swarm` (`skills/swarm/SKILL.md` in this plugin)
+- **Visuals (mandatory):** `skills/shared/visuals.md`
+
+## Visual identity (mandatory)
+
+1. Open with the `⬢ SWARM HEAVY` banner from visuals.md.
+2. Tags by phase (tasks pane must not say “General”):
+   - H1: `[SH/H1·Analyst]`, `[SH/H1·Skeptic]`, `[SH/H1·Explorer]`, `[SH/H1·Builder]`
+   - S:  `[SH/S·u-N] <title>`
+   - H2: `[SH/H2·Verifier]`, `[SH/H2·Skeptic]`
+3. Phase rules before every spawn cluster:
+   `── H1 council frame ──` / `── S2 fan-out  wave k ──` / `── H2 verify ──`
+4. Live board between phases; close with SWARM HEAVY complete banner.
+5. Final report: `# ⬢ SWARM HEAVY RESULT · <goal>`
 
 ---
 
@@ -63,7 +76,8 @@ Skip H1 only if the user already provided a locked plan and wants pure fan-out (
 
 ## Phase H1 — Council frame
 
-Run Heavy Phase 0–1 with `--agents` = council N (default 4 roles: Analyst, Skeptic, Explorer, Implementer).
+Run Heavy Phase 0–1 with `--agents` = council N (default 4: Analyst, Skeptic, Explorer, Builder).
+Use tags `[SH/H1·Analyst]` etc. Print `── H1 council frame ──` then spawn.
 
 Council must return:
 
@@ -107,9 +121,11 @@ Write todos for units + phases.
 Execute swarm waves exactly as `/swarm` Phase 3–5:
 
 - `background: true` for all wave workers
-- Description tags: `"[swarm-heavy:<kind>] u-<n>: <title>"`
+- Description tags: `"[SH/S·u-<n>] <title>"`
+- Phase rule `── S2 fan-out  wave k · launching N ──` then spawn
 - Required worker return contract (Status / Summary / Evidence / Artifacts / Handoff)
 - Retry failed units once; do not serial-collapse independent work
+- Live board while waiting
 
 ---
 
@@ -117,7 +133,8 @@ Execute swarm waves exactly as `/swarm` Phase 3–5:
 
 After swarm results are in, run a **short** Heavy re-council (2–4 agents is enough):
 
-Roles: Skeptic + Verifier (+ Analyst if needed).
+Roles: Skeptic + Verifier (+ Analyst if needed). Tags: `[SH/H2·Skeptic]`, `[SH/H2·Verifier]`.
+Print `── H2 verify council ──` then spawn.
 
 Give them:
 
@@ -140,7 +157,7 @@ If they demand a retry, spawn only the named units, then re-check once more (cap
 One voice. Structure:
 
 ```markdown
-# Swarm Heavy Result: <goal>
+# ⬢ SWARM HEAVY RESULT · <goal>
 
 ## Deliverable
 <the answer / artifact>
@@ -149,11 +166,11 @@ One voice. Structure:
 - Council: N agents, R rounds
 - Swarm: U units, W waves, concurrency C
 
+## Board (final)
+| id / role | status | notes |
+
 ## Council consensus
 - ...
-
-## Swarm ledger
-| id | title | status | notes |
 
 ## Conflicts & gaps
 - ...
