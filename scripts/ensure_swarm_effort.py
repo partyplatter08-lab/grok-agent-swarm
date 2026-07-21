@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seamless multi-agent efforts: menu + mode detection + default modes agent.
+"""Seamless multi-agent efforts: menu + deferred mode switch + modes agent.
 
 Effort selector (top → bottom):
   Swarm Heavy  → wire xhigh   → mode swarm-heavy
@@ -7,11 +7,15 @@ Effort selector (top → bottom):
   Heavy        → wire minimal → mode heavy
   High/Med/Low → stock        → mode normal
 
+Effort changes behave like normal effort:
+  - desired mode updates immediately
+  - active mode switches after the current multi-agent pipeline unlocks
+    (workers finish; orchestrator completes; next user turn / Stop promote)
+
 Installs:
-  - effort menu block in config.toml
-  - ~/.grok/agents/modes.md (+ heavy/swarm/swarm-heavy agents)
-  - [agent] name = "modes" so every session is mode-aware
-  - hooks: SessionStart (this script), UserPromptSubmit (inject_mode.py)
+  - effort menu + [agent] name = modes
+  - agents: modes, heavy, swarm, swarm-heavy
+  - hooks: SessionStart, UserPromptSubmit (inject_mode), Stop (promote)
 """
 
 from __future__ import annotations
@@ -214,15 +218,18 @@ def install_global_hooks() -> str:
     root = plugin_root().resolve()
     ensure = root / "scripts" / "ensure_swarm_effort.py"
     inject = root / "scripts" / "inject_mode.py"
-    if not ensure.is_file() or not inject.is_file():
+    on_stop = root / "scripts" / "on_stop.py"
+    if not ensure.is_file() or not inject.is_file() or not on_stop.is_file():
         return "hooks_skipped"
 
     hooks_dir = grok_home() / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     hook_path = hooks_dir / "agent-swarm.json"
 
+    # Point GROK_PLUGIN_ROOT at the *installed* copy when possible so reloads
+    # don't depend on a dev checkout path.
     payload = {
-        "description": "Agent Swarm: seamless effort→mode activation",
+        "description": "Agent Swarm: seamless effort→mode with deferred switch",
         "hooks": {
             "SessionStart": [
                 {
@@ -246,6 +253,20 @@ def install_global_hooks() -> str:
                             "command": (
                                 f'env GROK_PLUGIN_ROOT="{root}" '
                                 f'python3 "{inject}"'
+                            ),
+                            "timeout": 10,
+                        }
+                    ]
+                }
+            ],
+            "Stop": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                f'env GROK_PLUGIN_ROOT="{root}" '
+                                f'python3 "{on_stop}"'
                             ),
                             "timeout": 10,
                         }

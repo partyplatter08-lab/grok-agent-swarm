@@ -44,17 +44,27 @@ grok -p "Are you Swarm orchestrator?" --agent swarm
 grok -p "Are you Swarm Heavy?" --agent swarm-heavy
 ```
 
-## How to run each mode
+## How effort modes work (seamless)
 
-Grok does not let plugins rewrite the system prompt when you only change **effort**. Effort options set maximum reasoning (`xhigh`) and label the intent. **Full protocols** activate via the matching **agent** or slash command:
+After install, default agent is **`modes`** (mode-aware). Picking an effort is a
+**full mode**, same idea as `/heavy` · `/swarm` · `/swarm-heavy`.
 
-| Want | Effort picker | Agent / command |
-|------|---------------|-----------------|
-| Collaborative debate | **Heavy** | `/agents` → `heavy` or `/heavy` or `--agent heavy` |
-| Wide parallel fan-out | **Agent Swarm** | `/agents` → `swarm` or `/swarm` or `--agent swarm` |
-| Both (max mode) | **Swarm Heavy** | `/agents` → `swarm-heavy` or `/swarm-heavy` or `--agent swarm-heavy` |
+| Effort picker | Active protocol |
+|---------------|-----------------|
+| **Swarm Heavy** | Council → fan-out → verify |
+| **Agent Swarm** | Parallel map/reduce |
+| **Heavy** | Collaborative council |
+| High / Medium / Low | Normal single-agent |
 
-**Seamless daily setup:** set default agent in `/agents` to the mode you use most, and pick the matching effort option for reasoning headroom.
+### Switching mid-session (like normal effort)
+
+1. Change the effort anytime.
+2. If a swarm/heavy pipeline is **in flight**, workers **keep running** until that task finishes — nothing is killed.
+3. When the orchestrator **unlocks** (task done) and you send the **next** message, the new mode is active.
+
+Hooks maintain `~/.grok/agent-swarm-mode` (active) and optional `agent-swarm-mode-pending`.
+
+Slash commands still work: `/heavy`, `/swarm`, `/swarm-heavy`.
 
 ### Examples
 

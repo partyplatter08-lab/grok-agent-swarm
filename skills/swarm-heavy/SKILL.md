@@ -27,6 +27,11 @@ Load full detail when needed:
 - Swarm protocol: skill `swarm` (`skills/swarm/SKILL.md` in this plugin)
 - **Visuals (mandatory):** `skills/shared/visuals.md`
 
+## Effort / mode switching
+
+If effort changes mid-run: **never** abort healthy H1/S/H2 agents. Complete the
+pipeline, unlock mode state, then adopt the new effort on the next user turn.
+
 ## Visual identity (mandatory)
 
 1. Open with the `⬢ SWARM HEAVY` banner from visuals.md.

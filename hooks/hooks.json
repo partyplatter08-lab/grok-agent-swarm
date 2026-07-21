@@ -1,5 +1,5 @@
 {
-  "description": "Agent Swarm: register effort-picker option and activate orchestrator mode when Agent Swarm is selected",
+  "description": "Agent Swarm: seamless effort→mode with deferred switch while multi-agent work finishes",
   "hooks": {
     "SessionStart": [
       {
@@ -17,7 +17,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${GROK_PLUGIN_ROOT}/scripts/inject_swarm_mode.py\"",
+            "command": "python3 \"${GROK_PLUGIN_ROOT}/scripts/inject_mode.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${GROK_PLUGIN_ROOT}/scripts/on_stop.py\"",
             "timeout": 10
           }
         ]

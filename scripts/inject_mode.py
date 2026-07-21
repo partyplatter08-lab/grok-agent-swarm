@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""UserPromptSubmit: set active multi-agent mode from effort (seamless).
+"""UserPromptSubmit: map effort → desired mode; promote when idle.
 
-Effort menu wire values (unique so we can detect which mode was selected):
+Seamless effort semantics:
+  - Reading the effort picker updates *desired* mode every user message.
+  - *active* mode only changes when no multi-agent lock is held (pipeline idle).
+  - In-flight swarm/heavy workers keep the mode that started them until unlock.
 
-  swarm-heavy → xhigh
-  heavy       → minimal   (detectable; multi-agent structure carries the load)
-  swarm       → none      (detectable; parallelism carries the load)
-  high/medium/low → normal
-
-Also honors explicit slash/mentions in the prompt: /swarm-heavy, /swarm, /heavy.
-
-Writes: ~/.grok/agent-swarm-mode
+Also honors /swarm-heavy, /swarm, /heavy in the prompt (sets desired; same promote rules).
 """
 
 from __future__ import annotations
@@ -19,64 +15,27 @@ import json
 import os
 import re
 import sys
-import time
 from pathlib import Path
 
+# Allow running as installed plugin script
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
 
-MODE_FILE = Path.home() / ".grok" / "agent-swarm-mode"
-
-# Wire value → mode (see ensure_swarm_effort.py EFFORTS)
-WIRE_TO_MODE = {
-    "xhigh": "swarm-heavy",
-    "max": "swarm-heavy",  # if ever accepted
-    "minimal": "heavy",
-    "none": "swarm",
-    "high": "normal",
-    "medium": "normal",
-    "low": "normal",
-}
-
-
-def grok_home() -> Path:
-    return Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
-
-
-def find_summary(session_id: str) -> Path | None:
-    if not session_id:
-        return None
-    root = grok_home() / "sessions"
-    if not root.is_dir():
-        return None
-    for path in root.rglob("summary.json"):
-        if path.parent.name == session_id:
-            return path
-    return None
-
-
-def session_effort(session_id: str) -> str | None:
-    for _ in range(8):
-        summary = find_summary(session_id)
-        if summary and summary.is_file():
-            try:
-                data = json.loads(summary.read_text())
-                effort = data.get("reasoning_effort")
-                if effort is not None and effort != "":
-                    return str(effort)
-            except Exception:
-                pass
-        time.sleep(0.05)
-    return None
+import mode_state as ms  # noqa: E402
 
 
 def mode_from_prompt(prompt: str) -> str | None:
     p = (prompt or "").lower()
-    # Order matters: swarm-heavy before swarm/heavy
     if re.search(r"/swarm-heavy\b|swarm\s*heavy|heavy\s*swarm", p):
         return "swarm-heavy"
     if re.search(r"/swarm\b|agent\s*swarm", p):
         return "swarm"
     if re.search(r"/heavy\b|heavy\s*mode|grok\s*heavy", p):
         return "heavy"
+    # Explicit back to normal
+    if re.search(r"/effort\s+(high|medium|low)\b", p):
+        return "normal"
     return None
 
 
@@ -93,17 +52,28 @@ def main() -> int:
         or os.environ.get("GROK_SESSION_ID")
         or ""
     )
+    if not session_id:
+        print("{}")
+        return 0
+
+    ms.set_current_session(session_id)
     prompt = event.get("prompt") or ""
 
-    mode = mode_from_prompt(prompt)
-    if not mode:
-        effort = session_effort(session_id)
-        mode = WIRE_TO_MODE.get(effort or "", "normal")
+    # Promote any deferred switch if previous pipeline finished without unlock
+    ms.promote_if_idle(session_id)
 
-    MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    MODE_FILE.write_text(mode + "\n")
+    prompt_mode = mode_from_prompt(prompt)
+    effort = ms.session_effort(session_id)
+    if prompt_mode:
+        desired = prompt_mode
+    else:
+        desired = ms.mode_from_wire(effort)
 
-    # No additionalContext (Grok ignores it). Mode file + modes agent is the path.
+    state = ms.set_desired(session_id, desired, effort=effort or "")
+
+    # Agent reads ~/.grok/agent-swarm-mode (active) + optional pending file
+    # Nothing else to inject (Grok ignores additionalContext on this hook).
+    _ = state
     print("{}")
     return 0
 

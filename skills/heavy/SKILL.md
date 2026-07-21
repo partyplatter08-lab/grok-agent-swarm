@@ -24,6 +24,11 @@ Grok Build limits:
 - Spawn with `background: true` in the same turn for true parallelism.
 - Collect with `get_command_or_subagent_output`.
 
+## Effort / mode switching
+
+If effort changes mid-council: **do not cancel** council agents. Finish synthesis
+under Heavy, unlock mode state, then the new effort takes over next turn.
+
 ## Visual identity (mandatory)
 
 Follow `skills/shared/visuals.md`:

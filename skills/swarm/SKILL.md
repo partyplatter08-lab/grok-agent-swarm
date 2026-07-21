@@ -30,6 +30,12 @@ References (read when needed):
 - `references/decomposition.md` — how to split tasks
 - `references/synthesis.md` — how to merge worker outputs without hallucination amplification
 
+## Effort / mode switching
+
+If the user changes effort mid-swarm: **do not kill workers**. Finish the current
+pipeline under Swarm, then unlock mode state (see `agents/modes.md` / `mode_state.py`).
+The new effort applies on the next clean boundary after you finish.
+
 ## Visual identity (mandatory)
 
 Read and follow `skills/shared/visuals.md` (plugin path). Every run must:

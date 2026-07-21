@@ -1,7 +1,7 @@
 {
   "name": "agent-swarm",
-  "version": "1.3.0",
-  "description": "Agent Swarm, Heavy, Swarm Heavy for Grok Build \u2014 seamless effort modes with distinct visual language (banners, council/swarm task labels, agent colors).",
+  "version": "1.4.0",
+  "description": "Agent Swarm / Heavy / Swarm Heavy as real effort modes: deferred switch like normal effort (in-flight agents finish, then new mode takes over).",
   "author": {
     "name": "partyplatter08-lab"
   },
