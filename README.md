@@ -1,6 +1,19 @@
 # Agent Swarm for Grok Build
 
-Kimi-style **Agent Swarm** as a Grok Build plugin — including **Agent Swarm** in the **effort selector**.
+Kimi-style **Agent Swarm**, Grok **Heavy** collaborative multi-agent, and **Swarm Heavy** (both) — installable plugin with first-class **effort selector** modes.
+
+## Effort selector (top → bottom)
+
+| Menu label | Mode | What it is |
+|------------|------|------------|
+| **Swarm Heavy** | Council + fan-out | Heavy debate, then K3-style parallel swarm, then verify |
+| **Agent Swarm** | Map / reduce | Decompose wide work → parallel subagents → synthesize |
+| **Heavy** | Collaborative | Grok Heavy-style multi-agent debate on one hard problem |
+| High Effort | Stock | Single-agent, high reasoning (default) |
+| Medium Effort | Stock | Balanced |
+| Low Effort | Stock | Fast |
+
+Special modes sit **above** High.
 
 ## Install
 
@@ -9,100 +22,91 @@ grok plugin install partyplatter08-lab/grok-agent-swarm --trust
 grok plugin enable agent-swarm
 ```
 
-Start a **new session** once (or run the ensure script). SessionStart registers the effort option and installs the `swarm` agent.
+Start a **new session** once so SessionStart registers the menu and installs agents.
 
 ```bash
-# optional explicit setup
-python3 ~/.grok/installed-plugins/*/scripts/ensure_swarm_effort.py
+# or force setup now
+export GROK_PLUGIN_ROOT="$(grok plugin details agent-swarm 2>/dev/null | sed -n 's/.*path: //p' | head -1)"
+python3 "$GROK_PLUGIN_ROOT/scripts/ensure_swarm_effort.py"
 ```
 
 ### Verify
 
 ```bash
-# Effort menu accepts swarm:
+# Menu accepts special modes (wire value xhigh for all three specials):
+grok -p "ping" --effort swarm-heavy
 grok -p "ping" --effort swarm
+grok -p "ping" --effort heavy
 
-# Full orchestrator agent:
-grok -p "Are you the swarm orchestrator?" --agent swarm
+# Full protocols via agents:
+grok -p "Are you Heavy leader?" --agent heavy
+grok -p "Are you Swarm orchestrator?" --agent swarm
+grok -p "Are you Swarm Heavy?" --agent swarm-heavy
 ```
 
-In the TUI effort picker you should see:
+## How to run each mode
 
-| Option | Role |
-|--------|------|
-| High Effort | Normal single-agent, high reasoning |
-| Medium Effort | Balanced |
-| Low Effort | Fast |
-| **Agent Swarm** | Swarm-oriented effort (wire: `xhigh`) |
+Grok does not let plugins rewrite the system prompt when you only change **effort**. Effort options set maximum reasoning (`xhigh`) and label the intent. **Full protocols** activate via the matching **agent** or slash command:
 
-## Seamless usage
+| Want | Effort picker | Agent / command |
+|------|---------------|-----------------|
+| Collaborative debate | **Heavy** | `/agents` → `heavy` or `/heavy` or `--agent heavy` |
+| Wide parallel fan-out | **Agent Swarm** | `/agents` → `swarm` or `/swarm` or `--agent swarm` |
+| Both (max mode) | **Swarm Heavy** | `/agents` → `swarm-heavy` or `/swarm-heavy` or `--agent swarm-heavy` |
 
-### 1. Effort selector (what you asked for)
+**Seamless daily setup:** set default agent in `/agents` to the mode you use most, and pick the matching effort option for reasoning headroom.
 
-Open the model/effort picker and choose **Agent Swarm**, or:
+### Examples
 
 ```text
-/effort swarm
+/heavy Is this API design sound? Attack it from security, DX, and scale.
+
+/swarm Build a comparison table of 12 competitor pricing pages. --concurrency 12
+
+/swarm-heavy Design the monorepo layout, then scaffold apps/web, apps/api,
+  packages/ui in parallel, then adversarial review. --council 4 --concurrency 3
 ```
 
-That registers the swarm effort level on the session (high-capacity reasoning via wire value `xhigh`).
+## Mode cheat sheet
 
-### 2. Full orchestrator protocol (recommended companion)
+### Heavy (Grok Heavy-style)
 
-Grok does not let plugins rewrite the system prompt when you change effort, so the **orchestrator instructions** live on the **`swarm` agent**:
+- **One** hard problem, **many** minds
+- Parallel council (default 4): Analyst, Skeptic, Explorer, Implementer
+- Cross-check rounds, leader synthesis
+- Like a study group that argues before answering
 
-| Action | Result |
-|--------|--------|
-| `/agents` → select **swarm** | Session becomes the orchestrator |
-| `grok --agent swarm ...` | Same headless |
-| `GROK_AGENT=swarm` | Default agent for the process |
-| `/swarm <task>` | Skill entry with the same protocol |
+### Agent Swarm (Kimi K3-style)
 
-**Most seamless daily setup:** set the default agent to `swarm` once in `/agents` (or keep using `/effort swarm` + `/swarm` for individual tasks).
+- **Wide** work split into independent units
+- Map → parallel workers → reduce
+- Research / build / mixed modes
+- Depth-1 orchestrator only (Grok limit)
 
-### 3. Just give it work
-
-With the `swarm` agent active (or after `/swarm`):
-
-```text
-Survey 12 competitor pricing pages into a comparison table.
-Scaffold apps/web, apps/api, packages/ui with disjoint paths.
-Security + performance + DX audit in parallel, then ranked fixes.
-```
-
-## How the effort option is installed
-
-`scripts/ensure_swarm_effort.py` writes a managed block into `~/.grok/config.toml`:
-
-```toml
-# --- agent-swarm effort (managed) ---
-[model."grok-4.5"]
-supports_reasoning_effort = true
-
-[[model."grok-4.5".reasoning_efforts]]
-id = "high"
-...
-[[model."grok-4.5".reasoning_efforts]]
-id = "swarm"
-value = "xhigh"
-label = "Agent Swarm"
-description = "Parallel multi-agent orchestration..."
-# --- agent-swarm effort end ---
-```
-
-Wire value is **`xhigh`** so swarm is distinct from ordinary **High Effort** (`high`). Stock low/medium/high stay available.
-
-It also copies `agents/swarm.md` → `~/.grok/agents/swarm.md`.
-
-## What’s in the plugin
+### Swarm Heavy
 
 ```
-skills/swarm/          Orchestrator protocol
-commands/swarm.md      /swarm
-agents/swarm.md        Primary orchestrator agent
-agents/swarm-*.md      Worker specializations
-scripts/ensure_swarm_effort.py
-hooks/hooks.json       SessionStart → ensure
+H1 council frame → S1 decompose → S2 fan-out → H2 verify council → Final
+```
+
+Maximum depth **and** width. Expensive — use for architecture + parallel build + review, not typos.
+
+## What’s inside
+
+```
+skills/
+  heavy/           Collaborative multi-agent protocol
+  swarm/           K3-style swarm protocol
+  swarm-heavy/     Hybrid pipeline
+agents/
+  heavy.md
+  swarm.md
+  swarm-heavy.md
+  swarm-worker.md / swarm-researcher.md / swarm-reviewer.md
+commands/
+  heavy.md / swarm.md / swarm-heavy.md
+scripts/ensure_swarm_effort.py   # effort menu + agent install
+hooks/hooks.json
 ```
 
 ## Uninstall
@@ -110,8 +114,9 @@ hooks/hooks.json       SessionStart → ensure
 ```bash
 grok plugin disable agent-swarm
 grok plugin uninstall agent-swarm --confirm
-rm -f ~/.grok/hooks/agent-swarm.json ~/.grok/agents/swarm.md
-# optional: delete the managed block in ~/.grok/config.toml
+rm -f ~/.grok/hooks/agent-swarm.json
+rm -f ~/.grok/agents/{swarm,heavy,swarm-heavy}.md
+# optional: remove managed effort block in ~/.grok/config.toml
 ```
 
 ## License

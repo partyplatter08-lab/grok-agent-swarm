@@ -1,5 +1,5 @@
 ---
-description: Run a Kimi-style Agent Swarm — decompose a wide task, fan out parallel subagents, synthesize one deliverable
+description: Kimi-style Agent Swarm — decompose a wide task, fan out parallel subagents, synthesize one deliverable (not Heavy debate)
 argument-hint: "<task> [--concurrency N] [--mode research|build|mixed] [--dry-run]"
 ---
 

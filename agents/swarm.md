@@ -3,7 +3,8 @@ name: swarm
 description: >
   Agent Swarm orchestrator (primary session agent). Decomposes wide tasks, fans out
   parallel subagents, reconciles conflicts, and synthesizes one deliverable. Select
-  this agent or pick "Agent Swarm" in the effort selector for the same workflow.
+  this agent or pick "Agent Swarm" in the effort selector. For collaborative debate
+  use Heavy; for council+fan-out use Swarm Heavy.
 prompt_mode: full
 model: inherit
 permission_mode: default

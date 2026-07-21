@@ -1,7 +1,7 @@
 {
   "name": "agent-swarm",
-  "version": "1.1.1",
-  "description": "Kimi-style Agent Swarm for Grok Build \u2014 appears in the effort selector as Agent Swarm; orchestrator fans out parallel subagents and synthesizes results.",
+  "version": "1.2.0",
+  "description": "Agent Swarm, Heavy, and Swarm Heavy for Grok Build \u2014 effort selector modes (Swarm Heavy / Agent Swarm / Heavy above High) with collaborative multi-agent and K3-style parallel workflows.",
   "author": {
     "name": "partyplatter08-lab"
   },
@@ -9,10 +9,13 @@
   "license": "MIT",
   "keywords": [
     "agent-swarm",
+    "heavy",
+    "swarm-heavy",
     "multi-agent",
     "orchestration",
     "parallel",
     "kimi",
-    "subagents"
+    "grok-heavy",
+    "collaborative"
   ]
 }

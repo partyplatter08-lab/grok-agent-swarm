@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Register Agent Swarm in the effort selector + install the swarm agent.
+"""Register effort-selector modes + install primary agents.
 
-On SessionStart (and first manual run):
+Menu order (top → bottom):
+  1. Swarm Heavy  — collaborative council + K3-style swarm fan-out
+  2. Agent Swarm  — K3-style parallel map/reduce
+  3. Heavy        — Grok Heavy-style collaborative multi-agent debate
+  4. High Effort  — stock default
+  5. Medium Effort
+  6. Low Effort
 
-1. Writes a managed effort-menu entry for the default model:
-     id=swarm, label=Agent Swarm, wire value=xhigh
-2. Installs ~/.grok/agents/swarm.md (primary agent) so /agents and
-   --agent swarm / GROK_AGENT=swarm fully activate orchestrator mode.
-3. Installs ~/.grok/hooks/agent-swarm.json to re-run this ensure script
-   (keeps the effort option healthy after model default changes).
+Also installs ~/.grok/agents/{swarm,heavy,swarm-heavy}.md and a SessionStart
+hook that re-runs this script so the menu stays healthy.
 
 Idempotent.
 """
@@ -18,7 +20,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import sys
 from pathlib import Path
 
@@ -27,23 +28,46 @@ MARKER_END = "# --- agent-swarm effort end ---"
 MODEL_MARKER_BEGIN = "# --- agent-swarm model (managed) ---"
 MODEL_MARKER_END = "# --- agent-swarm model end ---"
 
-SWARM_EFFORT = {
-    "id": "swarm",
-    "value": "xhigh",
-    "label": "Agent Swarm",
-    "description": (
-        "Parallel multi-agent orchestration: decompose wide work, fan out "
-        "subagents, synthesize one deliverable"
-    ),
-    "default": False,
-}
-
-STOCK = [
+# Display order = list order. Special modes first (above High).
+# Wire values must be API-valid: low|medium|high|xhigh|max (max≡xhigh).
+# Special modes share xhigh so they get maximum reasoning; differentiation
+# is via the matching primary agent (/agents or --agent).
+EFFORTS = [
+    {
+        "id": "swarm-heavy",
+        "value": "xhigh",
+        "label": "Swarm Heavy",
+        "description": (
+            "Collaborative multi-agent council + K3-style parallel swarm "
+            "fan-out — maximum depth and width"
+        ),
+        "default": False,
+    },
+    {
+        "id": "swarm",
+        "value": "xhigh",
+        "label": "Agent Swarm",
+        "description": (
+            "K3-style parallel orchestration: decompose wide work, fan out "
+            "subagents, synthesize one deliverable"
+        ),
+        "default": False,
+    },
+    {
+        "id": "heavy",
+        "value": "xhigh",
+        "label": "Heavy",
+        "description": (
+            "Grok Heavy-style collaborative multi-agent debate: parallel "
+            "hypotheses, cross-check, leader synthesis"
+        ),
+        "default": False,
+    },
     {
         "id": "high",
         "value": "high",
         "label": "High Effort",
-        "description": "Highest implementation quality with extensive reasoning",
+        "description": "Highest single-agent implementation quality with extensive reasoning",
         "default": True,
     },
     {
@@ -61,6 +85,8 @@ STOCK = [
         "default": False,
     },
 ]
+
+USER_AGENTS = ("swarm", "heavy", "swarm-heavy")
 
 
 def grok_home() -> Path:
@@ -101,11 +127,12 @@ def effort_block(model_id: str) -> str:
     lines = [
         MARKER_BEGIN,
         "# Injected by agent-swarm plugin. Do not hand-edit between markers.",
+        "# Order: Swarm Heavy → Agent Swarm → Heavy → High → Medium → Low",
         f"[{key}]",
         "supports_reasoning_effort = true",
         "",
     ]
-    for e in STOCK + [SWARM_EFFORT]:
+    for e in EFFORTS:
         lines.append(f"[[{key}.reasoning_efforts]]")
         lines.append(f'id = "{e["id"]}"')
         lines.append(f'value = "{e["value"]}"')
@@ -151,23 +178,28 @@ def strip_orphaned_model_effort_blocks(text: str, model_id: str) -> str:
         text,
         flags=re.S,
     )
-    # Drop managed model alias block if present (legacy)
     text = strip_between(text, MODEL_MARKER_BEGIN, MODEL_MARKER_END)
     return text
 
 
-def install_user_agent() -> str:
-    src = plugin_root() / "agents" / "swarm.md"
-    if not src.is_file():
-        return "agent_missing"
+def install_user_agents() -> dict[str, str]:
+    results: dict[str, str] = {}
     dest_dir = grok_home() / "agents"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / "swarm.md"
-    body = src.read_text()
-    if dest.is_file() and dest.read_text() == body:
-        return "agent_unchanged"
-    dest.write_text(body)
-    return "agent_updated"
+    root = plugin_root()
+    for name in USER_AGENTS:
+        src = root / "agents" / f"{name}.md"
+        if not src.is_file():
+            results[name] = "missing"
+            continue
+        dest = dest_dir / f"{name}.md"
+        body = src.read_text()
+        if dest.is_file() and dest.read_text() == body:
+            results[name] = "unchanged"
+        else:
+            dest.write_text(body)
+            results[name] = "updated"
+    return results
 
 
 def install_global_hooks() -> str:
@@ -180,10 +212,8 @@ def install_global_hooks() -> str:
     hooks_dir.mkdir(parents=True, exist_ok=True)
     hook_path = hooks_dir / "agent-swarm.json"
 
-    # Only SessionStart ensure — Grok ignores additionalContext on passive hooks,
-    # so UserPromptSubmit inject cannot activate mode. Effort menu + agent do.
     payload = {
-        "description": "Agent Swarm: keep effort-picker option registered",
+        "description": "Agent Swarm: keep effort-picker modes registered",
         "hooks": {
             "SessionStart": [
                 {
@@ -228,25 +258,21 @@ def main() -> int:
         cfg_path.write_text(new_text)
         cfg_status = "updated"
 
-    agent_status = install_user_agent()
+    agent_status = install_user_agents()
     hooks_status = (
         "skipped_nested"
         if os.environ.get("AGENT_SWARM_ENSURING") == "1"
         else install_global_hooks()
     )
-    # Always refresh hooks path even when nested? Only outer run should rewrite hooks.
-    if os.environ.get("AGENT_SWARM_ENSURING") == "1" and hooks_status == "skipped_nested":
-        pass
 
     print(
         json.dumps(
             {
                 "config": cfg_status,
-                "agent": agent_status,
+                "agents": agent_status,
                 "hooks": hooks_status,
                 "model": model_id,
-                "effort_id": "swarm",
-                "wire_value": "xhigh",
+                "effort_order": [e["id"] for e in EFFORTS],
                 "config_path": str(cfg_path),
             }
         )
