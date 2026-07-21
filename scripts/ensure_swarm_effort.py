@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Ensure the active Grok model exposes Agent Swarm in the effort selector.
+"""Register Agent Swarm in the effort selector + install the swarm agent.
 
-Adds a menu option:
-  id=swarm, label=Agent Swarm, wire value=xhigh
+On SessionStart (and first manual run):
 
-Wire value is xhigh so session state can distinguish swarm mode from ordinary
-high effort (the stock menu is low/medium/high). Safe to re-run; idempotent.
+1. Writes a managed effort-menu entry for the default model:
+     id=swarm, label=Agent Swarm, wire value=xhigh
+2. Installs ~/.grok/agents/swarm.md (primary agent) so /agents and
+   --agent swarm / GROK_AGENT=swarm fully activate orchestrator mode.
+3. Installs ~/.grok/hooks/agent-swarm.json to re-run this ensure script
+   (keeps the effort option healthy after model default changes).
+
+Idempotent.
 """
 
 from __future__ import annotations
@@ -13,11 +18,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
 MARKER_BEGIN = "# --- agent-swarm effort (managed) ---"
 MARKER_END = "# --- agent-swarm effort end ---"
+MODEL_MARKER_BEGIN = "# --- agent-swarm model (managed) ---"
+MODEL_MARKER_END = "# --- agent-swarm model end ---"
 
 SWARM_EFFORT = {
     "id": "swarm",
@@ -59,11 +67,17 @@ def grok_home() -> Path:
     return Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
 
 
+def plugin_root() -> Path:
+    env = os.environ.get("GROK_PLUGIN_ROOT") or os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parent.parent
+
+
 def detect_default_model(cfg_text: str) -> str:
     m = re.search(r'(?m)^\s*default\s*=\s*"([^"]+)"\s*$', cfg_text)
     if m and m.group(1).strip():
         return m.group(1).strip()
-    # Prefer live catalog if present
     cache = grok_home() / "models_cache.json"
     if cache.is_file():
         try:
@@ -79,7 +93,6 @@ def detect_default_model(cfg_text: str) -> str:
 
 
 def model_table_key(model_id: str) -> str:
-    # Quote always so dotted ids (grok-4.5) parse as a single key.
     return f'model."{model_id}"'
 
 
@@ -87,7 +100,7 @@ def effort_block(model_id: str) -> str:
     key = model_table_key(model_id)
     lines = [
         MARKER_BEGIN,
-        f"# Injected by agent-swarm plugin. Do not hand-edit between markers.",
+        "# Injected by agent-swarm plugin. Do not hand-edit between markers.",
         f"[{key}]",
         "supports_reasoning_effort = true",
         "",
@@ -104,61 +117,137 @@ def effort_block(model_id: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def strip_managed(text: str) -> str:
+def strip_between(text: str, begin: str, end: str) -> str:
     return re.sub(
-        rf"\n?{re.escape(MARKER_BEGIN)}.*?{re.escape(MARKER_END)}\n?",
+        rf"\n?{re.escape(begin)}.*?{re.escape(end)}\n?",
         "\n",
         text,
         flags=re.S,
     )
 
 
-def already_has_swarm_for_model(text: str, model_id: str) -> bool:
-    # Detect our managed block for this model
-    if MARKER_BEGIN in text and f'model."{model_id}"' in text and 'id = "swarm"' in text:
-        return True
-    return False
+def strip_orphaned_model_effort_blocks(text: str, model_id: str) -> str:
+    key = re.escape(model_table_key(model_id))
+    text = re.sub(
+        rf"\n*\[\[{key}\.reasoning_efforts\]\][^\[]*",
+        "\n",
+        text,
+        flags=re.S,
+    )
+    text = re.sub(
+        rf"\n*\[{key}\]\n(?:supports_reasoning_effort\s*=\s*true\n)?(?:\n)*",
+        "\n",
+        text,
+    )
+    text = re.sub(
+        r"\n# --- swarm effort test start ---.*?# --- swarm effort test end ---\n?",
+        "\n",
+        text,
+        flags=re.S,
+    )
+    text = re.sub(
+        r"\n# --- swarm model test ---.*?# --- swarm model test end ---\n?",
+        "\n",
+        text,
+        flags=re.S,
+    )
+    # Drop managed model alias block if present (legacy)
+    text = strip_between(text, MODEL_MARKER_BEGIN, MODEL_MARKER_END)
+    return text
+
+
+def install_user_agent() -> str:
+    src = plugin_root() / "agents" / "swarm.md"
+    if not src.is_file():
+        return "agent_missing"
+    dest_dir = grok_home() / "agents"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "swarm.md"
+    body = src.read_text()
+    if dest.is_file() and dest.read_text() == body:
+        return "agent_unchanged"
+    dest.write_text(body)
+    return "agent_updated"
+
+
+def install_global_hooks() -> str:
+    root = plugin_root().resolve()
+    ensure = root / "scripts" / "ensure_swarm_effort.py"
+    if not ensure.is_file():
+        return "hooks_skipped"
+
+    hooks_dir = grok_home() / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hook_path = hooks_dir / "agent-swarm.json"
+
+    # Only SessionStart ensure — Grok ignores additionalContext on passive hooks,
+    # so UserPromptSubmit inject cannot activate mode. Effort menu + agent do.
+    payload = {
+        "description": "Agent Swarm: keep effort-picker option registered",
+        "hooks": {
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                f'env AGENT_SWARM_ENSURING=1 GROK_PLUGIN_ROOT="{root}" '
+                                f'python3 "{ensure}"'
+                            ),
+                            "timeout": 15,
+                        }
+                    ]
+                }
+            ]
+        },
+    }
+    new = json.dumps(payload, indent=2) + "\n"
+    old = hook_path.read_text() if hook_path.is_file() else None
+    if old != new:
+        hook_path.write_text(new)
+        return "hooks_updated"
+    return "hooks_unchanged"
 
 
 def main() -> int:
     cfg_path = grok_home() / "config.toml"
     if not cfg_path.exists():
         cfg_path.write_text(
-            f'[models]\ndefault = "grok-4.5"\ndefault_reasoning_effort = "high"\n\n'
+            '[models]\ndefault = "grok-4.5"\ndefault_reasoning_effort = "high"\n\n'
         )
 
     original = cfg_path.read_text()
-    # Drop legacy test markers from earlier installs
-    cleaned = re.sub(
-        r"\n# --- swarm effort test start ---.*?# --- swarm effort test end ---\n?",
-        "\n",
-        original,
-        flags=re.S,
-    )
-    cleaned = strip_managed(cleaned)
-    model_id = detect_default_model(cleaned)
+    model_id = detect_default_model(original)
+    cleaned = strip_between(original, MARKER_BEGIN, MARKER_END)
+    cleaned = strip_orphaned_model_effort_blocks(cleaned, model_id)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).rstrip() + "\n"
 
-    # If user already has a non-managed swarm entry, leave alone
-    if already_has_swarm_for_model(original, model_id) and MARKER_BEGIN in original:
-        # Still rewrite managed block to keep it current
-        pass
-
-    new_text = cleaned.rstrip() + "\n\n" + effort_block(model_id)
+    new_text = cleaned + "\n" + effort_block(model_id)
+    cfg_status = "unchanged"
     if new_text != original:
         cfg_path.write_text(new_text)
-        status = "updated"
-    else:
-        status = "unchanged"
+        cfg_status = "updated"
 
-    # Machine-readable one-liner for logs; human-friendly on stderr
+    agent_status = install_user_agent()
+    hooks_status = (
+        "skipped_nested"
+        if os.environ.get("AGENT_SWARM_ENSURING") == "1"
+        else install_global_hooks()
+    )
+    # Always refresh hooks path even when nested? Only outer run should rewrite hooks.
+    if os.environ.get("AGENT_SWARM_ENSURING") == "1" and hooks_status == "skipped_nested":
+        pass
+
     print(
         json.dumps(
             {
-                "status": status,
+                "config": cfg_status,
+                "agent": agent_status,
+                "hooks": hooks_status,
                 "model": model_id,
                 "effort_id": "swarm",
                 "wire_value": "xhigh",
-                "config": str(cfg_path),
+                "config_path": str(cfg_path),
             }
         )
     )

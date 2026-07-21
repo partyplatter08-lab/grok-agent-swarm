@@ -40,14 +40,40 @@ def find_summary(session_id: str) -> Path | None:
 
 
 def session_effort(session_id: str) -> str | None:
-    summary = find_summary(session_id)
-    if not summary:
-        return None
-    try:
-        data = json.loads(summary.read_text())
-    except Exception:
-        return None
-    return data.get("reasoning_effort")
+    """Best-effort read of current reasoning effort.
+
+    On brand-new sessions, summary.json may lag set_session_model by a few
+    hundred ms. Retry briefly, then fall back to events.jsonl.
+    """
+    import time
+
+    summary = None
+    for _ in range(6):
+        summary = find_summary(session_id)
+        if summary and summary.is_file():
+            try:
+                data = json.loads(summary.read_text())
+                effort = data.get("reasoning_effort")
+                if effort:
+                    return effort
+            except Exception:
+                pass
+        time.sleep(0.05)
+
+    # Fallback: scan events for the latest reasoning effort
+    if summary and summary.parent.is_dir():
+        events = summary.parent / "events.jsonl"
+        if events.is_file():
+            try:
+                last = None
+                for line in events.read_text().splitlines():
+                    if "xhigh" in line or "reasoning" in line.lower():
+                        last = line
+                if last and "xhigh" in last:
+                    return "xhigh"
+            except Exception:
+                pass
+    return None
 
 
 def is_swarm_mode(effort: str | None, prompt: str) -> bool:

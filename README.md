@@ -1,137 +1,116 @@
 # Agent Swarm for Grok Build
 
-Kimi K3–style **Agent Swarm** as a drop-in [Grok Build](https://x.ai) plugin — including a first-class option in the **effort selector**.
+Kimi-style **Agent Swarm** as a Grok Build plugin — including **Agent Swarm** in the **effort selector**.
 
-```
-  Effort picker                    Session behavior
-  ┌─────────────────┐              ┌──────────────────────────┐
-  │ High Effort     │              │ single agent             │
-  │ Medium Effort   │              │ single agent             │
-  │ Low Effort      │              │ single agent             │
-  │ Agent Swarm  ◄──┼── select ──► │ orchestrator + subagents │
-  └─────────────────┘              └──────────────────────────┘
-```
-
-## Install (any Grok Build machine)
+## Install
 
 ```bash
 grok plugin install partyplatter08-lab/grok-agent-swarm --trust
 grok plugin enable agent-swarm
 ```
 
-Pin a release:
+Start a **new session** once (or run the ensure script). SessionStart registers the effort option and installs the `swarm` agent.
 
 ```bash
-grok plugin install partyplatter08-lab/grok-agent-swarm@v1.1.0 --trust
+# optional explicit setup
+python3 ~/.grok/installed-plugins/*/scripts/ensure_swarm_effort.py
 ```
-
-Then **start a new session** (or reload hooks). On `SessionStart` the plugin writes the effort-menu entry into `~/.grok/config.toml`.
 
 ### Verify
 
 ```bash
-grok plugin list
-# Agent Swarm should be listed among effort options:
-grok -p "ping" --effort swarm   # accepted; remaps wire value to xhigh
+# Effort menu accepts swarm:
+grok -p "ping" --effort swarm
+
+# Full orchestrator agent:
+grok -p "Are you the swarm orchestrator?" --agent swarm
 ```
 
-In the TUI: open the model/effort picker → choose **Agent Swarm**.
+In the TUI effort picker you should see:
+
+| Option | Role |
+|--------|------|
+| High Effort | Normal single-agent, high reasoning |
+| Medium Effort | Balanced |
+| Low Effort | Fast |
+| **Agent Swarm** | Swarm-oriented effort (wire: `xhigh`) |
 
 ## Seamless usage
 
-| How | What happens |
-|-----|----------------|
-| **Effort selector → Agent Swarm** | Every prompt runs in orchestrator mode (hook injects the swarm protocol). |
-| `/effort swarm` | Same as the picker. |
-| `grok --effort swarm ...` | Same in headless. |
-| `/swarm <task>` | Explicit skill entry (still available). |
-| `/agents` → **swarm** | Optional primary agent with the same protocol. |
+### 1. Effort selector (what you asked for)
 
-You should not need to type `/swarm` after selecting **Agent Swarm** in the effort menu. Just give the task.
-
-### Examples
+Open the model/effort picker and choose **Agent Swarm**, or:
 
 ```text
-# After selecting Agent Swarm in the effort picker:
+/effort swarm
+```
+
+That registers the swarm effort level on the session (high-capacity reasoning via wire value `xhigh`).
+
+### 2. Full orchestrator protocol (recommended companion)
+
+Grok does not let plugins rewrite the system prompt when you change effort, so the **orchestrator instructions** live on the **`swarm` agent**:
+
+| Action | Result |
+|--------|--------|
+| `/agents` → select **swarm** | Session becomes the orchestrator |
+| `grok --agent swarm ...` | Same headless |
+| `GROK_AGENT=swarm` | Default agent for the process |
+| `/swarm <task>` | Skill entry with the same protocol |
+
+**Most seamless daily setup:** set the default agent to `swarm` once in `/agents` (or keep using `/effort swarm` + `/swarm` for individual tasks).
+
+### 3. Just give it work
+
+With the `swarm` agent active (or after `/swarm`):
+
+```text
 Survey 12 competitor pricing pages into a comparison table.
-
-Scaffold apps/web, apps/api, packages/ui with disjoint path ownership.
-
-Security, performance, and DX audit in parallel, then a ranked fix list.
+Scaffold apps/web, apps/api, packages/ui with disjoint paths.
+Security + performance + DX audit in parallel, then ranked fixes.
 ```
 
-Or explicitly:
+## How the effort option is installed
 
-```text
-/swarm Compare the top open-source agent frameworks. --concurrency 10 --mode research
-```
-
-## How the effort option works
-
-Plugins cannot invent new API reasoning levels. This plugin:
-
-1. **SessionStart** — ensures your default model’s effort menu includes:
-
-   | Menu id | Label | Wire value |
-   |---------|-------|------------|
-   | `high` / `medium` / `low` | stock | same |
-   | **`swarm`** | **Agent Swarm** | **`xhigh`** |
-
-2. **UserPromptSubmit** — if the session’s `reasoning_effort` is `xhigh` (the swarm wire value), injects orchestrator instructions so the model loads the swarm skill and fans out subagents.
-
-`xhigh` is reserved for this menu entry so swarm is distinguishable from ordinary **High Effort** (`high`). Stock low/medium/high stay unchanged.
-
-Managed config lives between markers in `~/.grok/config.toml`:
+`scripts/ensure_swarm_effort.py` writes a managed block into `~/.grok/config.toml`:
 
 ```toml
 # --- agent-swarm effort (managed) ---
+[model."grok-4.5"]
+supports_reasoning_effort = true
+
+[[model."grok-4.5".reasoning_efforts]]
+id = "high"
 ...
+[[model."grok-4.5".reasoning_efforts]]
+id = "swarm"
+value = "xhigh"
+label = "Agent Swarm"
+description = "Parallel multi-agent orchestration..."
 # --- agent-swarm effort end ---
 ```
 
-Uninstalling the plugin stops injection; remove the managed block manually if you want the stock effort list only.
+Wire value is **`xhigh`** so swarm is distinct from ordinary **High Effort** (`high`). Stock low/medium/high stay available.
 
-## When to use a swarm
+It also copies `agents/swarm.md` → `~/.grok/agents/swarm.md`.
 
-**Good fit:** multi-source research, batch extraction, multi-module scaffolds with clear path ownership, multi-perspective reviews.
-
-**Bad fit:** single-file fixes, long sequential refactors with shared mutable state. The orchestrator will warn and fall back to single-agent when the task is not swarm-shaped.
-
-## What’s inside
+## What’s in the plugin
 
 ```
-grok-agent-swarm/
-├── plugin.json
-├── hooks/hooks.json              # SessionStart + UserPromptSubmit
-├── scripts/
-│   ├── ensure_swarm_effort.py    # register effort-picker option
-│   └── inject_swarm_mode.py      # activate protocol when swarm selected
-├── commands/swarm.md
-├── skills/swarm/
-│   ├── SKILL.md
-│   └── references/
-├── agents/
-│   ├── swarm.md                  # primary orchestrator agent
-│   ├── swarm-worker.md
-│   ├── swarm-researcher.md
-│   └── swarm-reviewer.md
-└── README.md
+skills/swarm/          Orchestrator protocol
+commands/swarm.md      /swarm
+agents/swarm.md        Primary orchestrator agent
+agents/swarm-*.md      Worker specializations
+scripts/ensure_swarm_effort.py
+hooks/hooks.json       SessionStart → ensure
 ```
-
-## Design notes (vs Kimi K3 Swarm Max)
-
-| Kimi K3 Swarm | This plugin |
-|---------------|-------------|
-| Learned PARL orchestrator | Prompted skill + effort-mode injection |
-| ~300 sub-agents | Default 8, cap 24 |
-| Nested coordination | Flat tree (Grok depth 1) |
-| Dedicated Swarm Max model | Effort picker option on your Grok model |
 
 ## Uninstall
 
 ```bash
 grok plugin disable agent-swarm
 grok plugin uninstall agent-swarm --confirm
+rm -f ~/.grok/hooks/agent-swarm.json ~/.grok/agents/swarm.md
 # optional: delete the managed block in ~/.grok/config.toml
 ```
 
